@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+database/*.db
+models/*.joblib
+data/transactions.csv
+reports/*.csv
