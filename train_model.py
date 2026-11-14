@@ -132,21 +132,51 @@ def main():
         ("model", model)
     ])
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.20, random_state=42, stratify=y
+    # Keep a separate test set untouched until final evaluation. Use the
+    # validation set only to select a decision threshold.
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        X, y, test_size=0.40, random_state=42, stratify=y
+    )
+    X_valid, X_test, y_valid, y_test = train_test_split(
+        X_temp, y_temp, test_size=0.50, random_state=42, stratify=y_temp
     )
     pipeline.fit(X_train, y_train)
 
-    pred = pipeline.predict(X_test)
-    prob = pipeline.predict_proba(X_test)[:, 1]
+    valid_prob = pipeline.predict_proba(X_valid)[:, 1]
+    # Prefer the greatest recall while maintaining at least 65% precision.
+    # If no threshold meets that constraint, choose the threshold with the
+    # best validation F1-score.
+    candidates = np.linspace(0.05, 0.95, 91)
+    eligible = []
+    fallback = []
+    for threshold in candidates:
+        valid_pred = (valid_prob >= threshold).astype(int)
+        precision = precision_score(y_valid, valid_pred, zero_division=0)
+        recall = recall_score(y_valid, valid_pred, zero_division=0)
+        f1 = f1_score(y_valid, valid_pred, zero_division=0)
+        fallback.append((f1, threshold))
+        if precision >= 0.65:
+            eligible.append((recall, f1, threshold))
 
-    print("\nMODEL PERFORMANCE")
-    print("-----------------")
+    if eligible:
+        selected_threshold = max(eligible, key=lambda item: (item[0], item[1]))[2]
+        threshold_selection = "Highest validation recall among thresholds with precision >= 65%."
+    else:
+        selected_threshold = max(fallback, key=lambda item: item[0])[1]
+        threshold_selection = "No validation threshold met 65% precision; selected the best validation F1-score."
+
+    # Final metrics are calculated once on the untouched test set.
+    test_prob = pipeline.predict_proba(X_test)[:, 1]
+    pred = (test_prob >= selected_threshold).astype(int)
+
+    print("\nMODEL PERFORMANCE (HELD-OUT TEST SET)")
+    print("------------------------------------")
+    print("Selected threshold:", round(float(selected_threshold), 3))
     print("Accuracy :", round(accuracy_score(y_test, pred), 4))
     print("Precision:", round(precision_score(y_test, pred, zero_division=0), 4))
     print("Recall   :", round(recall_score(y_test, pred, zero_division=0), 4))
     print("F1-score :", round(f1_score(y_test, pred, zero_division=0), 4))
-    print("ROC-AUC  :", round(roc_auc_score(y_test, prob), 4))
+    print("ROC-AUC  :", round(roc_auc_score(y_test, test_prob), 4))
     print("\nConfusion Matrix:")
     print(confusion_matrix(y_test, pred))
     print("\nClassification Report:")
@@ -154,20 +184,23 @@ def main():
 
     bundle = {
         "pipeline": pipeline,
-        "threshold": 0.50,
+        "threshold": float(selected_threshold),
+        "threshold_selection": threshold_selection,
         "features": required,
         "metrics": {
             "accuracy": accuracy_score(y_test, pred),
             "precision": precision_score(y_test, pred, zero_division=0),
             "recall": recall_score(y_test, pred, zero_division=0),
             "f1": f1_score(y_test, pred, zero_division=0),
-            "roc_auc": roc_auc_score(y_test, prob),
+            "roc_auc": roc_auc_score(y_test, test_prob),
             "confusion_matrix": confusion_matrix(y_test, pred).tolist(),
             "test_samples": int(len(y_test)),
+            "validation_samples": int(len(y_valid)),
+            "selected_threshold": float(selected_threshold),
             "fraud_test_samples": int((y_test == 1).sum()),
             "legitimate_test_samples": int((y_test == 0).sum())
         },
-        "evaluation_note": "Metrics are based on the held-out test split. If the bundled synthetic demonstration data was used, these scores measure performance on synthetic data, not real bank transactions."
+        "evaluation_note": "The threshold was selected using a separate validation split. Final metrics are calculated on an untouched held-out test split. If synthetic demonstration data was used, these scores measure performance on synthetic data, not real bank transactions."
     }
     joblib.dump(bundle, MODEL_PATH)
     print(f"\nModel saved to: {MODEL_PATH}")
