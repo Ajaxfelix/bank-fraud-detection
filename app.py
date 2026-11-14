@@ -222,6 +222,19 @@ elif page == "Reports":
 
 elif page == "Model Performance":
     st.markdown('<div class="hero"><h1>Model Performance</h1><p>Evaluation results from the model training test set.</p></div>', unsafe_allow_html=True)
+    st.write("Retrain the model after changing the training code or dataset. This replaces the currently saved model.")
+    confirm_retrain = st.checkbox("I understand that retraining will replace the current model.")
+    if st.button("🔄 Retrain Model", type="primary", disabled=not confirm_retrain):
+        try:
+            with st.spinner("Training a new model and calculating evaluation metrics..."):
+                train_model()
+                MODEL_BUNDLE = load_model(MODEL_PATH)
+            st.success("Model retrained successfully. The performance results below are now from the newly trained model.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Model retraining failed: {exc}")
+            st.info("Check that the training dataset contains the required feature columns and a fraud-label column.")
+
     metrics = MODEL_BUNDLE.get("metrics", {})
     if not metrics:
         st.warning("No evaluation metrics are stored with this model. Retrain the model to generate them.")
@@ -233,6 +246,8 @@ elif page == "Model Performance":
         m3.metric("Recall", f"{metrics.get('recall', 0):.1%}")
         m4.metric("F1-score", f"{metrics.get('f1', 0):.1%}")
         m5.metric("ROC-AUC", f"{metrics.get('roc_auc', 0):.3f}")
+        if metrics.get("selected_threshold") is not None:
+            st.metric("Selected prediction threshold", f"{metrics['selected_threshold']:.3f}")
         st.subheader("Confusion matrix")
         cm = metrics.get("confusion_matrix")
         if cm and len(cm) == 2 and all(len(row) == 2 for row in cm):
