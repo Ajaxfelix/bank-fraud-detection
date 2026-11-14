@@ -70,7 +70,7 @@ if not st.session_state.logged_in:
 with st.sidebar:
     st.title("🛡️ Fraud Monitor")
     st.caption("Bank Payment Fraud Detection")
-    page = st.radio("Navigation", ["Dashboard", "Transaction Detection", "Transaction History", "Reports"])
+    page = st.radio("Navigation", ["Dashboard", "Transaction Detection", "Transaction History", "Reports", "Model Performance"])
     st.divider()
     st.caption("Model: Random Forest")
     if st.button("Log out", use_container_width=True):
@@ -218,3 +218,31 @@ elif page == "Reports":
         st.download_button("Download CSV report", df.to_csv(index=False).encode("utf-8"),
                            file_name="fraud_detection_report.csv", mime="text/csv", type="primary")
         st.caption("Reports contain model classifications. Confirm suspicious transactions through an authorised review process.")
+
+
+elif page == "Model Performance":
+    st.markdown('<div class="hero"><h1>Model Performance</h1><p>Evaluation results from the model training test set.</p></div>', unsafe_allow_html=True)
+    metrics = MODEL_BUNDLE.get("metrics", {})
+    if not metrics:
+        st.warning("No evaluation metrics are stored with this model. Retrain the model to generate them.")
+    else:
+        st.info(MODEL_BUNDLE.get("evaluation_note", "Metrics describe the held-out test data used during training."))
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Accuracy", f"{metrics.get('accuracy', 0):.1%}")
+        m2.metric("Precision", f"{metrics.get('precision', 0):.1%}")
+        m3.metric("Recall", f"{metrics.get('recall', 0):.1%}")
+        m4.metric("F1-score", f"{metrics.get('f1', 0):.1%}")
+        m5.metric("ROC-AUC", f"{metrics.get('roc_auc', 0):.3f}")
+        st.subheader("Confusion matrix")
+        cm = metrics.get("confusion_matrix")
+        if cm and len(cm) == 2 and all(len(row) == 2 for row in cm):
+            cm_df = pd.DataFrame(cm, index=["Actual legitimate", "Actual fraud"],
+                                 columns=["Predicted legitimate", "Predicted fraud"])
+            st.dataframe(cm_df, use_container_width=True)
+            st.caption("Rows are actual classes; columns are model predictions. False positives are legitimate transactions flagged as fraud. False negatives are fraudulent transactions classified as legitimate.")
+        else:
+            st.info("Confusion matrix is not available in this saved model. Retrain the model to generate it.")
+        st.write(f"Test samples: {metrics.get('test_samples', 'Not recorded')}")
+        st.write(f"Fraud samples in test set: {metrics.get('fraud_test_samples', 'Not recorded')}")
+        st.write(f"Legitimate samples in test set: {metrics.get('legitimate_test_samples', 'Not recorded')}")
+        st.warning("Important: high scores on synthetic/demo data do not prove that the system will detect fraud accurately in real banking data. A properly labelled, representative real-world dataset and independent validation are required.")
