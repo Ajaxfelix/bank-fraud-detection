@@ -161,8 +161,13 @@ def main():
             "precision": precision_score(y_test, pred, zero_division=0),
             "recall": recall_score(y_test, pred, zero_division=0),
             "f1": f1_score(y_test, pred, zero_division=0),
-            "roc_auc": roc_auc_score(y_test, prob)
-        }
+            "roc_auc": roc_auc_score(y_test, prob),
+            "confusion_matrix": confusion_matrix(y_test, pred).tolist(),
+            "test_samples": int(len(y_test)),
+            "fraud_test_samples": int((y_test == 1).sum()),
+            "legitimate_test_samples": int((y_test == 0).sum())
+        },
+        "evaluation_note": "Metrics are based on the held-out test split. If the bundled synthetic demonstration data was used, these scores measure performance on synthetic data, not real bank transactions."
     }
     joblib.dump(bundle, MODEL_PATH)
     print(f"\nModel saved to: {MODEL_PATH}")
